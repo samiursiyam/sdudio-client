@@ -11,7 +11,9 @@ const session = await auth.api.getSession({
 
   const user = session?.user;
   if(!user){
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', request.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl)
   }
 //   console.log('Session:', session);
 //   return NextResponse.redirect(new URL('/home', request.url))

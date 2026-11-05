@@ -166,11 +166,13 @@ export function Navbar() {
                     className="flex items-center gap-2 text-white/90 transition-colors hover:text-white"
                   >
                     <Avatar className="size-8">
-                      <AvatarImage
-                        referrerPolicy="no-referrer"
-                        src={user.image || ""}
-                        alt={user?.name?.charAt(0)?.toUpperCase() || "U"}
-                      />
+                      {user.image ? (
+                        <AvatarImage
+                          referrerPolicy="no-referrer"
+                          src={user.image}
+                          alt={user?.name?.charAt(0)?.toUpperCase() || "U"}
+                        />
+                      ) : null}
                       <AvatarFallback className="bg-[#e61a4f] text-white">
                         {user.name?.charAt(0)?.toUpperCase() || "U"}
                       </AvatarFallback>

@@ -3,6 +3,7 @@
 
 import { ArrowRight, CalendarDays, Check } from "lucide-react";
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { getJwtToken, bearer } from "@/lib/get-jwt";
 
@@ -18,6 +19,7 @@ const toDateInputValue = (value) => {
 
 const BookingCard = ({ destination }) => {
     const { data: session } = authClient.useSession();
+    const router = useRouter();
 
     const user = session?.user;
 
@@ -87,7 +89,7 @@ console.log("JWT Token:", token);
         e.preventDefault();
 
         if (!user?.email) {
-            alert("Please login first to rent this space.");
+            router.push(`/login?redirect=${encodeURIComponent(`/destinations/${_id}`)}`);
             return;
         }
 

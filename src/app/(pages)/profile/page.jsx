@@ -46,7 +46,7 @@ const ProfileContent = async () => {
   });
 
   if (!session?.user) {
-    redirect('/login');
+    redirect('/login?redirect=/profile');
   }
 
   const user = session.user;
@@ -78,8 +78,13 @@ const ProfileContent = async () => {
     const bookings = await bookingsRes.json();
 
     if (Array.isArray(destinations)) {
+      // Same visibility rule as /my-listings: studios with no owner
+      // plus studios this user added
+      const email = String(user.email || '').trim().toLowerCase();
       listingsCount = destinations.filter(
-        (destination) => destination.userEmail === user.email
+        (destination) =>
+          !destination?.userEmail ||
+          String(destination.userEmail).trim().toLowerCase() === email
       ).length;
     }
 

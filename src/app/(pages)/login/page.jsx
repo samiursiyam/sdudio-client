@@ -1,6 +1,7 @@
 
 'use client'
 
+import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -18,10 +19,28 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { authClient } from "@/lib/auth-client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+
+/* Only internal absolute paths are allowed as return targets —
+   blocks open redirects like ?redirect=https://evil.com or ?redirect=//evil.com */
+const safeRedirect = (target) => {
+  if (typeof target !== "string") return "/";
+  if (!target.startsWith("/") || target.startsWith("//")) return "/";
+  return target;
+};
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = safeRedirect(searchParams.get("redirect"));
 
   const handleSubmitLoin = async (e) => {
     e.preventDefault();
@@ -34,7 +53,7 @@ export default function LoginPage() {
     });
 
     if (data) {
-      router.push("/");
+      router.push(redirectTo);
     }
 
     if (error) {

@@ -119,6 +119,11 @@ const { payload } = await jwtVerify(token, JWKS, {
 - Mobile menu (hamburger, small screens) closes on **outside pointerdown** (document listener gated on `open` + `headerRef` on `<header>`); stays open on clicks inside the navbar. Account links inside it already close it.
 - Two `console.log(user)` calls that leaked email+password to the browser console were removed (`login/page.jsx`, `sigin/page.jsx`).
 - `.env`: `NEXT_PUBLIC_BETTER_AUTH_URL` was added (it was referenced by `auth-client.js` but undefined in the browser bundle).
+- `/my-listings` visibility: studios with **no owner** (legacy seed data) are visible to everyone, plus studios whose `userEmail` matches the viewer — studios added with someone else's email stay hidden (owner-gmail sees their own). Edit/Delete buttons appear only on owned studios.
+- Add New Space success → `/my-listings` (was `/`).
+- `/login` honors `?redirect=` (internal absolute paths only — external/protocol-relative URLs are rejected and fall back to `/`). Unauthenticated entry points pass it: Booking button (`/destinations/<id>`), `src/proxy.js`, and the protected server pages (`/my-bookings`, `/my-listings`, `/profile`).
+- Cancel button in My Bookings renders as **"Cancel"** (was truncated to "Cance"); the cancel flow was verified end-to-end (create → visible → DELETE → gone). A stray `vbearer` token (corrupt edit) that broke cancel with `ReferenceError` was fixed.
+- Navbar avatar image renders only when `user.image` exists (was `src=""` — made the browser re-download the page); `AvatarFallback` covers image-less users.
 
 ### Gotchas / known non-goals
 

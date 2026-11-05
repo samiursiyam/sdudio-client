@@ -99,7 +99,7 @@ export default function AddDestination() {
 
       setForm(initialForm);
       setError("");
-      router.push("/");
+      router.push("/my-listings");
     } catch (err) {
       console.error(err);
       setError("Could not reach the server. Is it running on port 5000?");

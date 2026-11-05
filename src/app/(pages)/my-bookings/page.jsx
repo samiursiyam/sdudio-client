@@ -10,7 +10,7 @@ const MyBookingsContent = async () => {
     });
 
     if (!session?.user) {
-        redirect('/login');
+        redirect('/login?redirect=/my-bookings');
     }
 
     const user = session.user;

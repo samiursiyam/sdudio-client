@@ -19,7 +19,7 @@ const handleCancel = async () => {
             `${process.env.NEXT_PUBLIC_SERVER_URL}/my-bookings/${bookingId}`,
             {
                 method: 'DELETE',
-                headers: { ...  vbearer(token) },
+                headers: { ...bearer(token) },
             }
         );
 
@@ -47,7 +47,7 @@ const handleCancel = async () => {
       className="flex items-center gap-1.5 border border-red-200 px-4 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
     >
       <Trash2 className="size-3.5" aria-hidden />
-      {pending ? 'Cancelling…' : 'Cance'}
+      {pending ? 'Cancelling…' : 'Cancel'}
     </button>
   );
 }

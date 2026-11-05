@@ -24,7 +24,7 @@ const MyListingsContent = async () => {
     });
 
     if (!session?.user) {
-        redirect('/login');
+        redirect('/login?redirect=/my-listings');
     }
 
     const user = session.user;
@@ -49,9 +49,15 @@ const MyListingsContent = async () => {
         // Backend unreachable — fall through to the empty state
     }
 
-    /* Only the destinations this user added (matched by userEmail) */
+    const email = String(user.email || '').trim().toLowerCase();
+    const isOwner = (destination) =>
+        String(destination?.userEmail || '').trim().toLowerCase() === email;
+
+    /* Studios with no owner (legacy seed data) are visible to everyone,
+       plus studios owned by the current user. Studios added with
+       someone else's email stay hidden. */
     const listings = (Array.isArray(data) ? data : []).filter(
-        (destination) => destination.userEmail === user.email
+        (destination) => !destination?.userEmail || isOwner(destination)
     );
 
     /* Quick overview numbers */
@@ -71,8 +77,9 @@ const MyListingsContent = async () => {
                             My Studio Listings
                         </h1>
                         <p className="mt-3 text-sm text-foreground/70">
-                            Studio spaces you have added — edit or remove them
-                            anytime
+                            Your studios, plus the shared ones
+                            everyone can see
+
                         </p>
                     </div>
 
@@ -120,10 +127,11 @@ const MyListingsContent = async () => {
                 {listings.length === 0 ? (
                     <div className="mt-8 border border-[#e3e7ec] bg-white p-10 text-center">
                         <p className="text-lg font-medium text-foreground">
-                            No listings found
+                            No studios found
                         </p>
                         <p className="mt-2 text-sm text-foreground/60">
-                            You have not added any destinations yet.
+                            The studio list is empty — check that the backend is
+                            running.
                         </p>
                     </div>
                 ) : (
@@ -132,14 +140,16 @@ const MyListingsContent = async () => {
                             <div key={destination._id}>
                                 <DestinationCard destination={destination} />
 
-                                {/* Owner actions */}
-                                <div className="mt-3 flex items-center gap-3">
-                                    <EditDestination destination={destination} />
-                                    <DeleteDestination
-                                        id={destination._id}
-                                        redirectTo="/my-listings"
-                                    />
-                                </div>
+                                {/* Owner actions — only for studios this user owns */}
+                                {isOwner(destination) && (
+                                    <div className="mt-3 flex items-center gap-3">
+                                        <EditDestination destination={destination} />
+                                        <DeleteDestination
+                                            id={destination._id}
+                                            redirectTo="/my-listings"
+                                        />
+                                    </div>
+                                )}
 
                                 <p className="mt-2 text-xs text-foreground/60">
                                     Added: {formatDate(destination.createdAt)}
