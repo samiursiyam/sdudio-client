@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 import { getJwtToken, bearer } from "@/lib/get-jwt";
+import { toast } from "@/components/ui/toast";
 
 export function CancelBooking({ bookingId }) {
   const router = useRouter();
@@ -30,10 +31,19 @@ const handleCancel = async () => {
         }
 
         router.refresh();
+        toast.add({
+            type: "success",
+            title: "Booking cancelled",
+            description: "Your booking has been cancelled.",
+        });
 
     } catch (error) {
         console.error(error);
-        alert(error.message);
+        toast.add({
+            type: "error",
+            title: "Cancellation failed",
+            description: error.message || "Failed to cancel booking",
+        });
     } finally {
         setPending(false);
     }

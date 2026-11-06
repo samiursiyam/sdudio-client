@@ -2,6 +2,7 @@ import { Josefin_Sans, Caveat } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar/navbar";
 import { Footer } from "@/components/footer/footer";
+import { Toaster } from "@/components/ui/toast";
 import { getDestinations } from "@/lib/destinations-server";
 
 const josefinSans = Josefin_Sans({
@@ -41,6 +42,7 @@ export default async function RootLayout({ children }) {
 
         {children}
          <Footer destinations={destinations} />
+         <Toaster />
         </body>
     </html>
   );

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { authClient } from "@/lib/auth-client";
 import { getJwtToken, bearer } from "@/lib/get-jwt";
+import { toast } from "@/components/ui/toast";
 
 const categories = [
   "Photo Studio",
@@ -99,6 +100,11 @@ export default function AddDestination() {
 
       setForm(initialForm);
       setError("");
+      toast.add({
+        type: "success",
+        title: "Studio space added!",
+        description: "Your listing is now live.",
+      });
       router.push("/my-listings");
     } catch (err) {
       console.error(err);

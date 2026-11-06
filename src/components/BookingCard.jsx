@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { getJwtToken, bearer } from "@/lib/get-jwt";
+import { toast } from "@/components/ui/toast";
 
 const toDateInputValue = (value) => {
     if (!value) return "";
@@ -44,7 +45,6 @@ const BookingCard = ({ destination }) => {
                 setIsChecking(true);
 
                 const token = await getJwtToken();
-console.log("JWT Token:", token);
                 const res = await fetch(
                     `${process.env.NEXT_PUBLIC_SERVER_URL}/bookings/${encodeURIComponent(
                         user.email.trim().toLowerCase()
@@ -94,7 +94,11 @@ console.log("JWT Token:", token);
         }
 
         if (isBooked) {
-            alert("You have already reserved this space.");
+            toast.add({
+                type: "warning",
+                title: "Already reserved",
+                description: "You have already reserved this space.",
+            });
             return;
         }
 
@@ -172,14 +176,22 @@ console.log("JWT Token:", token);
 
             setIsBooked(true);
 
-            alert("Reservation successful!");
+            toast.add({
+                type: "success",
+                title: "Reservation successful!",
+                description: "Your booking has been confirmed.",
+            });
 
             e.target.reset();
 
         } catch (error) {
             console.error("Booking Error:", error);
 
-            alert(error.message || "Something went wrong!");
+            toast.add({
+                type: "error",
+                title: "Booking failed",
+                description: error.message || "Something went wrong!",
+            });
         } finally {
             setIsSubmitting(false);
         }

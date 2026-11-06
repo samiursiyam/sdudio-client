@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { authClient } from "@/lib/auth-client"
 import { useRouter, useSearchParams } from "next/navigation"
+import { toast } from "@/components/ui/toast"
 
 /* Only internal absolute paths are allowed as return targets —
    blocks open redirects like ?redirect=https://evil.com or ?redirect=//evil.com */
@@ -53,11 +54,17 @@ function LoginForm() {
     });
 
     if (data) {
+      toast.add({ type: "success", title: "Welcome back!" });
       router.push(redirectTo);
     }
 
     if (error) {
       console.error("Error signing in:", error);
+      toast.add({
+        type: "error",
+        title: "Login failed",
+        description: error?.message || "Invalid email or password.",
+      });
     }
   };
 

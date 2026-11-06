@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { authClient } from "@/lib/auth-client";
 import { getJwtToken, bearer } from "@/lib/get-jwt";
+import { toast } from "@/components/ui/toast";
 
 const DeleteDestination = ({id, redirectTo = "/destinations"}) => {
 
@@ -50,6 +51,11 @@ const DeleteDestination = ({id, redirectTo = "/destinations"}) => {
          return;
        }
 
+       toast.add({
+         type: "success",
+         title: "Destination deleted",
+         description: "The listing has been permanently removed.",
+       });
        router.push(redirectTo);
     }
     return (

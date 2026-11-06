@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { authClient } from "@/lib/auth-client"
 import { useRouter } from "next/navigation"
+import { toast } from "@/components/ui/toast"
 
 export default function LoginForm() {
   const router = useRouter();
@@ -34,11 +35,17 @@ export default function LoginForm() {
     });
 
     if (data) {
+      toast.add({ type: "success", title: "Account created! Welcome." });
       router.push("/");
     }
 
     if (error) {
       console.error("Error signing up:", error);
+      toast.add({
+        type: "error",
+        title: "Sign up failed",
+        description: error?.message || "Something went wrong. Please try again.",
+      });
     }
   };
 

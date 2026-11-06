@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Heart } from 'lucide-react';
+import { toast } from "@/components/ui/toast";
 
 /* localStorage list of saved destination ids */
 const readSaved = () => {
@@ -28,11 +29,19 @@ export function SaveButton({ destinationId, className = 'absolute left-3 top-3' 
       ? savedList.filter((id) => id !== destinationId)
       : [...savedList, destinationId];
 
+    const isRemoving = savedList.includes(destinationId);
+
     try {
       localStorage.setItem('savedDestinations', JSON.stringify(next));
     } catch (error) {
       // localStorage unavailable
     }
+
+    toast.add(
+      isRemoving
+        ? { type: "info", title: "Removed from saved" }
+        : { type: "success", title: "Saved to your list" }
+    );
 
     setSaved(!saved);
   };
