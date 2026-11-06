@@ -108,6 +108,12 @@ export function CategoriesShowcase() {
     const track = trackRef.current;
     if (!track) return;
 
+    /* Touch swipes scroll natively; only mouse/pen need the JS drag */
+    if (event.pointerType === 'touch') return;
+
+    /* Keep native HTML drag (links/images) from hijacking the gesture */
+    event.preventDefault();
+
     /* Capture so the drag keeps following the pointer even when the
        finger/mouse leaves the track */
     track.setPointerCapture?.(event.pointerId);
@@ -172,7 +178,7 @@ export function CategoriesShowcase() {
           Rent a Studio Space
         </h2>
         <p className="mt-2 text-center text-sm text-foreground/60">
-          Ten kinds of creative spaces — drag or use the arrows to explore
+          Ten kinds of creative spaces — swipe or use the arrows to explore
         </p>
 
         <div
@@ -196,11 +202,12 @@ export function CategoriesShowcase() {
           <div
             ref={trackRef}
             onPointerDown={onPointerDown}
+            onDragStart={(event) => event.preventDefault()}
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
             onPointerLeave={endDrag}
-            className={`flex snap-x snap-mandatory gap-6 overflow-x-auto pb-4 select-none [scrollbar-width:none] [touch-action:pan-y] [&::-webkit-scrollbar]:hidden ${
+            className={`flex snap-x snap-proximity gap-6 overflow-x-auto pb-4 select-none [scrollbar-width:none] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden ${
               dragging ? 'cursor-grabbing' : 'cursor-grab'
             }`}
           >
@@ -212,6 +219,7 @@ export function CategoriesShowcase() {
                   key={category.name}
                   href={`/categories?category=${category.name}`}
                   onClick={handleCardClick}
+                  draggable={false}
                   className="group w-72 flex-none snap-start overflow-hidden rounded-2xl border border-[#e3e7ec] bg-white shadow-sm transition-all duration-300 hover:-translate-y-2 hover:border-[#e61a4f]/40 hover:shadow-xl"
                 >
                   {/* Image with floating icon chip */}
