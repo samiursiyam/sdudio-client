@@ -1,105 +1,136 @@
 # Vercel-এ Deploy করার সম্পূর্ণ গাইড
 
-Sale, saved data আর login কেন কাজ করছে — সংক্ষিপ্ত উত্তর হলো: **Express backend (`:5000`) Vercel-এ নেই**। Vercel/serverless থেকে `localhost:5000` এ পৌঁছানো অসম্ভব, তাই booking/saved data লোড হচ্ছিল না। নিচের ধাপগুলো অনুসরণ করলে সব ঠিক হয়ে যাবে।
+## সংক্ষিপ্ত উত্তর: কেন booking কাজ করছিল না?
+
+দুটি আলাদা কারণ ছিল:
+
+1. **Vercel/serverless থেকে `localhost:5000` এ পৌঁছানো সম্ভব না** — তাই production-এ ডেটা লোড হচ্ছিল না। Backend-টা অবশ্যই public URL-এ deploy থাকতে হবে, আর Vercel-এ `SERVER_URL` সেদিকে point করতে হবে।
+2. **দুটি Vercel app (frontend + backend) এর মধ্যে JWT verify হচ্ছিল না** — backend `BETTER_AUTH_URL`/`BETTER_AUTH_JWKS_URL` দিয়ে frontend-এর JWKS fetch করে iss/aud মেলানোর চেষ্টা করছিল; environment mismatch-এ সেটা ব্যর্থ হয়ে `401 "Invalid or expired token"` আসতো।
+
+এখন এই সিস্টেম **তিন-স্তরের** — এর যেকোনো একটি কাজ করলেই booking হবে:
+
+| স্তর | কীভাবে কাজ করে | কখন সক্রিয় |
+|---|---|---|
+| ① `x-internal-secret` **(primary)** | Browser → `/backend/*` (same-origin) → Next.js session verify করে → backend-এ `x-internal-secret` + `x-user-*` headers পাঠায় | `INTERNAL_API_SECRET` দুটি Vercel project-এই set থাকলে |
+| ② JWKS Bearer **(fallback)** | Browser → `/backend/*` → proxy session থেকে Bearer JWT বানিয়ে backend-এ পাঠায় → backend frontend-এর JWKS দিয়ে verify করে | `INTERNAL_API_SECRET` set না থাকলে |
+| ③ সরাসরি Bearer | curl/external tool দিয়ে সরাসরি backend-এ | সবসময় (যদি JWKS config সঠিক থাকে) |
+
+> ① স্তর **JWKS-এর ওপর মোটেও নির্ভর করে না** — তাই দুটি app-এর env mismatch-এ আর কখনো 401 আসবে না।
+> Browser আর কখনো token দেখেই না — সব কিছু server-side।
 
 ---
 
-## ১. প্রথমে Backend deploy করতে হবে (বাধ্যতামূলক)
+## ১. Backend deploy করতে হবে (বাধ্যতামূলক)
 
-তোমার Express + MongoDB backend টা একটা public URL-এ deploy করতে হবে। ফ্রি অপশন:
-
-- **Render** (render.com) — "Web Service", free tier
-- **Railway** (railway.app)
-- অথবা যেকোনো VPS
-
-Backend deploy করার সময় সেখানে এই environment variables দিতে হবে:
+`wonderlsat-server` টা তোমার Vercel project **"studeio"** হিসেবে deploy (`vercel --prod` চললেই হবে, অথবা GitHub push → auto deploy)। Backend-এ এই env vars (Production + Preview, দুটোই) set থাকতে হবে:
 
 | Variable | Value |
 |---|---|
-| `MONGODB_URL` | তোমার MongoDB Atlas connection string |
-| `PORT` | Render নিজে সেট করে দেয় — কোড `process.env.PORT` পড়লেই হবে |
-| `FRONTEND_URL` | `https://<তোমার-vercel-app>.vercel.app` (যদি CORS config থাকে backend-এ) |
+| `MONGODB_URL` | MongoDB Atlas connection string |
+| `BETTER_AUTH_URL` | `https://studeo-client.vercel.app` |
+| `BETTER_AUTH_JWKS_URL` | `https://studeo-client.vercel.app/api/auth/jwks` |
+| `INTERNAL_API_SECRET` | frontend-এর সাথে **একই** secret (নিচে ২-এ দেখো) |
 
-> **MongoDB Atlas** ব্যবহার করলে Network Access → `0.0.0.0/0` allow করতে হবে, নাহলে Atlas কানেকশন refuse করবে।
+> **MongoDB Atlas** → Network Access → `0.0.0.0/0` allow করতে হবে।
 
-Backend deploy হলে একটা URL পাবে, যেমন: `https://studio-ora-api.onrender.com`
-
-সেটা টেস্ট করো:
-
-```
-curl https://studio-ora-api.onrender.com/destinations
-```
-
-JSON list আসলে backend ঠিক আছে।
+টেস্ট করো: `curl https://<backend-url>/destinations` → JSON list আসলে ঠিক আছে।
 
 ---
 
-## ২. Vercel-এ Environment Variables সেট করো
+## ২. দুটি Vercel project-এই `INTERNAL_API_SECRET` set করো (একই মান)
 
-Vercel → তোমার Project → **Settings → Environment Variables**:
+এটাই **সবচেয়ে গুরুত্বপূর্ণ**। Frontend আর backend দুটোতেই হুবহু এক secret দিতে হবে:
 
-| Variable | Value (উদাহরণ) |
+```bash
+# frontend (studeo-client)
+vercel env add INTERNAL_API_SECRET production
+vercel env add INTERNAL_API_SECRET preview
+
+# backend (studeio)
+vercel env add INTERNAL_API_SECRET production
+vercel env add INTERNAL_API_SECRET preview
+```
+
+Secret generate করতে:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+> এই secret শুধু server-side (Vercel serverless functions)-এ থাকে —
+> browser bundle-এ কখনো যায় না। `.gitignore`-এ `.env` আছে, secret কোথাও commit হয় না।
+
+✅ **আমি ইতিমধ্যে দুটি project-এই `INTERNAL_API_SECRET` set করে দিয়েছি (Production + Preview)।**
+শুধু মনে রেখো: env var শুধু **পরের deployment-এ** কার্যকর হয়।
+
+---
+
+## ৩. Frontend Vercel env (studeo-client)
+
+| Variable | Value |
 |---|---|
-| `SERVER_URL` | `https://studio-ora-api.onrender.com` |
-| `BETTER_AUTH_URL` | `https://studio-ora.vercel.app` |
-| `NEXT_PUBLIC_BETTER_AUTH_URL` | `https://studio-ora.vercel.app` |
-| `BETTER_AUTH_SECRET` | তোমার production secret (dev-এর secret হুবহু ব্যবহার না করাই ভালো) |
+| `SERVER_URL` | backend-এর URL (যেমন `https://studeio.vercel.app`) |
+| `BETTER_AUTH_URL` | `https://studeo-client.vercel.app` |
+| `NEXT_PUBLIC_BETTER_AUTH_URL` | `https://studeo-client.vercel.app` |
+| `BETTER_AUTH_SECRET` | production secret |
 | `MONGODB_URL` | Atlas connection string |
-| `NEXT_PUBLIC_SERVER_URL` | (ঐচ্ছিক — browser এখন আর এটা ব্যবহার করে না; `/backend/*` proxy ব্যবহার করে) |
-
-সেট করার পর **Redeploy** করতে হবে (Deployments → Redeploy) — env var পরিবর্তন build-এ প্রবেশ করে।
+| `INTERNAL_API_SECRET` | ✅ set (আমি করে দিয়েছি) |
+| `NEXT_PUBLIC_SERVER_URL` | (অপ্রয়োজনীয় — রাখা আছে legacy হিসেবে) |
 
 ---
 
-## ৩. Backend-এর JWT verifier production-এর জন্য বদলাও
+## ৪. Deploy-র পর checklist
 
-Backend যখন JWT verify করে (`jose` দিয়ে), সেখানে **issuer/audience/JWKS** URL গুলো localhost-এ হার্ডকোড করা থাকলে production login কাজ করবে না। Backend repo-তে:
+1. `curl https://<backend>/destinations` → 200
+2. Site-এ `/destinations` → data দেখাচ্ছে?
+3. Login → studio book → `/my-bookings`-এ **দেখা যাচ্ছে?** (এটাই আগে fail করত)
+4. `/saved` → heart দিয়ে save → list-এ আসছে?
+5. Logout → `/my-bookings` → `/login`-এ redirect হচ্ছে?
+6. ভুল URL → custom 404 page দেখাচ্ছে?
 
-```js
-// আগে (dev):
-const JWKS = createRemoteJWKSet(new URL('http://localhost:3000/api/auth/jwks'));
-issuer: 'http://localhost:3000',
-audience: 'http://localhost:3000',
+যেকোনো step fail হলে Vercel → Deployments → Functions → Logs দেখো।
 
-// পরে (production):
-const JWKS = createRemoteJWKSet(new URL('https://studio-ora.vercel.app/api/auth/jwks'));
-issuer: 'https://studio-ora.vercel.app',
-audience: 'https://studio-ora.vercel.app',
+---
+
+## ৫. কীভাবে কাজ করে (architecture)
+
+```
+Browser  ──GET/POST /backend/*──▶  Next.js (Vercel)
+   │                                 │
+   │                                 ├─ 1) better-auth session verify
+   │                                 ├─ 2) 401 যদি mutation হয়, session নেই
+   │                                 ├─ 3) x-internal-secret + x-user-email
+   │                                 │      + x-user-id + x-user-name
+   ◀──────────  response  ───────────┤
+                                    ▼
+                        Express backend (Vercel)
+                                    │
+                        secret match → verified identity (JWKS ছাড়াই)
+                        নাহলে → JWKS Bearer fallback
 ```
 
-সবচেয়ে ভালো: এগুলো env var থেকে পড়ো (যেমন `FRONTEND_URL`), তাহলে dev আর prod একই কোড-এ চলে।
+**Security notes**
 
-> `https://studio-ora.vercel.app` এর জায়গায় তোমার **আসল** Vercel domain (বা custom domain) বসাও। `issuer`/`audience` অবশ্যই `BETTER_AUTH_URL`-এর সাথে হুবহু মিলতে হবে।
-
----
-
-## ৪. Frontend কীভাবে কাজ করে
-
-- **Browser → backend সরাসরি যায় না।** Browser সবসময় same-origin `https://yourapp.vercel.app/backend/...` কল করে, আর `next.config.mjs` সেটাকে `${SERVER_URL}/...`-এ rewrite করে দেয়।
-  - ✅ CORS লাগবে না
-  - ✅ Backend URL browser bundle-এ প্রকাশ পায় না
-  - ✅ Authorization (Bearer) header হুবহু backend পর্যন্ত পৌঁছায়
-- **Server components** (`/my-bookings`, `/my-listings`, `/profile`, এবং home/… সব public pages) সরাসরি `${SERVER_URL}` থেকে fetch করে (server-side, cached ৩০ সেকেন্ড)।
-- Backend unreachable হলে এখন আর চুপচাপ "No bookings found" দেখায় না — একটা **"We can't reach the server"** card + "Try again" button দেখায় (profile-এ একটা warning banner দেখায়)। তাই deploy-র পর কোনো page ভেঙে গেলে চোখে পড়া যাবে।
+- `GET /bookings/<email>` — এখন **প্রোফাইলে লকড**: নিজের bookings ছাড়া কারো bookings দেখা যাবে না (403)। আগে এটা public ছিল!
+- `POST /bookings`, `POST /add-destination` — `userEmail` body থেকে নেওয়া **হয় না**; verified session থেকে নেওয়া হয় (spoofing বন্ধ)।
+- Server-side duplicate guard: একই studio দুইবার book করা যাবে না (409) — double-click protection-ও।
+- `DELETE /my-bookings/:id` — শুধু নিজের booking cancel করা যাবে (ownership check)।
+- Unauthenticated mutation → proxy তেই 401।
+- Booking data এখন আর browser/অন্য user-এর কাছে ফাঁস হয় না।
 
 ---
 
-## ৫. Deploy-পর checklist
+## ৬. Local development
 
-1. `https://<app>.vercel.app/destinations` — studio list দেখা যাচ্ছে?
-2. Sign up / login কাজ করছে? (cookie set হচ্ছে কিনা DevTools → Application → Cookies-এ দেখো)
-3. একটা studio book করো → `/my-bookings`-এ দেখা যাচ্ছে? তা না হলে backend console-এ JWT error চেক করো (ধাপ ৩)
-4. Saved heart চাপো → `/saved`-এ দেখা যাচ্ছে? (saved page এখন backend call **করেই না** — তাই এটা সবসময় কাজ করবে)
-5. `/any-random-url` — নতুন custom 404 page দেখাচ্ছে?
-6. Slow network-এ page navigate করলে branded loading screen / skeleton দেখাচ্ছে?
+`.env` (frontend) এবং `wonderlsat-server/.env` — দুই জায়গাতেই:
 
----
+```
+INTERNAL_API_SECRET=<same 64-char hex>
+```
 
-## ৬. যেসব সমস্যা এখনও হলে
+✅ দুটোতেই local-এ set করে দিয়েছি। Local backend restart দরকার হলে:
 
-| লক্ষণ | কারণ | সমাধান |
-|---|---|---|
-| সব page-এ "can't reach the server" | `SERVER_URL` ভুল / backend ডাউন | ধাপ ১ ও ২ চেক করো; `curl <SERVER_URL>/destinations` |
-| Login হয়, কিন্তু booking/my-listings data নেই | Backend JWKS/iss/aud localhost-এ | ধাপ ৩ |
-| Images ভাঙা / অপ্টিমাইজ হয় না | Backend host `remotePatterns`-এ নেই | এটা এখন অটো — `next.config.mjs` `SERVER_URL` থেকে host পড়ে; তবু না হলে SmartImage fallback unoptimized হিসেবে কাজ করবে, পেজ ভাঙবে না |
-| Login নিজেই ব্যর্থ | `BETTER_AUTH_URL` সঠিক সেট হয়নি | Vercel env চেক করে redeploy |
+```bash
+cd ../wonderlsat-server
+node index.js
+```

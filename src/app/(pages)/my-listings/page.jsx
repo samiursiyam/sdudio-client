@@ -9,6 +9,7 @@ import EditDestination from '@/components/EditDestination';
 import DeleteDestination from '@/components/DeleteDestination';
 import { BackendUnavailable } from '@/components/backend-unavailable';
 import { RouteShell, PageHeadingSkeleton, CardGridSkeleton, StatCardsSkeleton } from '@/components/loading/skeletons';
+import { BACKEND_URL, getBackendAuthHeaders } from '@/lib/backend';
 
 const formatDate = (value) => {
     if (!value) return '—';
@@ -31,21 +32,14 @@ const MyListingsContent = async () => {
 
     const user = session.user;
 
-    /* Best-effort JWT for the external backend; pages still render when it fails */
-    let jwt = null;
-    try {
-        const tokenData = await auth.api.getToken({ headers: await headers() });
-        jwt = tokenData?.token ?? null;
-    } catch {
-        jwt = null;
-    }
-
     let data = [];
     let backendError = null;
 
+    const authHeaders = await getBackendAuthHeaders(user);
+
     try {
-        const res = await fetch(`${process.env.SERVER_URL}/destinations`, {
-            headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+        const res = await fetch(`${BACKEND_URL}/destinations`, {
+            headers: authHeaders,
             cache: 'no-store',
         });
         if (!res.ok) {

@@ -14,6 +14,7 @@ import {
 import { auth } from '@/lib/auth';
 import { SmartImage } from '@/components/smart-image';
 import { headers } from 'next/headers';
+import { BACKEND_URL, getBackendAuthHeaders } from '@/lib/backend';
 
 const quickLinks = [
   {
@@ -53,15 +54,7 @@ const ProfileContent = async () => {
 
   const user = session.user;
 
-  /* Best-effort JWT for the external backend; stats fall back to zero when it fails */
-  let jwt = null;
-  try {
-    const tokenData = await auth.api.getToken({ headers: await headers() });
-    jwt = tokenData?.token ?? null;
-  } catch {
-    jwt = null;
-  }
-  const authHeaders = jwt ? { Authorization: `Bearer ${jwt}` } : {};
+  const authHeaders = await getBackendAuthHeaders(user);
 
   /* Account overview numbers */
   let listingsCount = 0;
@@ -71,11 +64,11 @@ const ProfileContent = async () => {
 
   try {
     const [destinationsRes, bookingsRes] = await Promise.all([
-      fetch(`${process.env.SERVER_URL}/destinations`, {
+      fetch(`${BACKEND_URL}/destinations`, {
         headers: authHeaders,
         cache: 'no-store',
       }),
-      fetch(`${process.env.SERVER_URL}/bookings/${encodeURIComponent(user.email)}`, {
+      fetch(`${BACKEND_URL}/bookings/${encodeURIComponent(user.email)}`, {
         headers: authHeaders,
         cache: 'no-store',
       }),

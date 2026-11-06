@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
-import { getJwtToken, bearer } from "@/lib/get-jwt";
 import { toast } from "@/components/ui/toast";
 
 export function CancelBooking({ bookingId }) {
@@ -14,14 +13,9 @@ const handleCancel = async () => {
     setPending(true);
 
     try {
-        const token = await getJwtToken();
-
         const res = await fetch(
             `/backend/my-bookings/${bookingId}`,
-            {
-                method: 'DELETE',
-                headers: { ...bearer(token) },
-            }
+            { method: 'DELETE' }
         );
 
         const data = await res.json();

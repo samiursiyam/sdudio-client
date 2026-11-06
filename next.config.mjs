@@ -23,14 +23,11 @@ const nextConfig = {
   cacheComponents: false,
   partialPrefetching: false,
   reactCompiler: true,
-  /* Browser calls the backend through /backend/* on this same origin —
-     no CORS config and no NEXT_PUBLIC URL needed in production.
-     The browser's Authorization header is forwarded untouched. */
-  async rewrites() {
-    return [
-      { source: '/backend/:path*', destination: `${SERVER_URL}/:path*` },
-    ];
-  },
+  /* The browser reaches the Express backend through the same-origin
+     /backend/* route handler (src/app/backend/[...path]/route.js),
+     which verifies the better-auth session and re-asserts identity
+     with x-internal-secret + x-user-* headers — no CORS and no
+     public backend URL in the client bundle. */
   /* Image optimization — resize + convert (WebP/AVIF) remote images
      through the built-in next/image optimizer */
   images: {

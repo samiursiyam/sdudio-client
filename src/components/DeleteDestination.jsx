@@ -15,8 +15,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { authClient } from "@/lib/auth-client";
-import { getJwtToken, bearer } from "@/lib/get-jwt";
 import { toast } from "@/components/ui/toast";
 
 const DeleteDestination = ({id, redirectTo = "/destinations"}) => {
@@ -27,18 +25,10 @@ const DeleteDestination = ({id, redirectTo = "/destinations"}) => {
     const hendleDeletDestination = async ()=>{
        setError("");
 
-       /* Only the email that created this destination may delete it */
-       const session = await authClient.getSession();
-       const userEmail = session?.data?.user?.email || "";
-       const token = await getJwtToken();
-
+       /* The /backend proxy re-asserts the verified owner identity —
+          the backend authorizes the delete against it */
        const res = await fetch(`/backend/destination/${id}`,{
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          ...bearer(token),
-        },
-        body: JSON.stringify({ userEmail }),
        })
        const data = await res.json();
 

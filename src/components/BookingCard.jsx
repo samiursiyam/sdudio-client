@@ -5,7 +5,6 @@ import { ArrowRight, CalendarDays, Check } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { getJwtToken, bearer } from "@/lib/get-jwt";
 import { toast } from "@/components/ui/toast";
 
 const toDateInputValue = (value) => {
@@ -44,13 +43,10 @@ const BookingCard = ({ destination }) => {
             try {
                 setIsChecking(true);
 
-                const token = await getJwtToken();
                 const res = await fetch(
                     `/backend/bookings/${encodeURIComponent(
                         user.email.trim().toLowerCase()
-                    )}`,
-                    { headers: { authorization: `Bearer ${token}` } }
-
+                    )}`
                 );
 
                 // console.log("Check Booking Response:", res);
@@ -107,15 +103,6 @@ const BookingCard = ({ destination }) => {
         try {
             setIsSubmitting(true);
 
-            // Get JWT token from Better Auth
-            const { data: tokenData, error: tokenError } =
-                await authClient.token();
-
-            if (tokenError || !tokenData?.token) {
-                throw new Error("JWT token not found. Please login again.");
-            }
-
-            
             const departureDateInput =
                 e.target.elements["departure-date"].value;
 
@@ -135,7 +122,6 @@ const BookingCard = ({ destination }) => {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    ...bearer(tokenData?.token),
                 },
                 body: JSON.stringify(bookingData),
             });

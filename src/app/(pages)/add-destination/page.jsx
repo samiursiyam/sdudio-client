@@ -14,8 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { authClient } from "@/lib/auth-client";
-import { getJwtToken, bearer } from "@/lib/get-jwt";
 import { toast } from "@/components/ui/toast";
 
 const categories = [
@@ -70,14 +68,10 @@ export default function AddDestination() {
 
     try {
 
-      /* Attach the logged-in user's email so listings can be filtered later,
-         plus the creation time so the newest ones can be shown first */
-      const session = await authClient.getSession();
-      const token = await getJwtToken();
-      // console.log("JWT Token:", token); // এই লাইনটি যোগ করো
+      /* Identity is re-asserted server-side by the /backend proxy —
+         no token needed in the browser bundle */
       const payload = {
         ...form,
-        userEmail: session?.data?.user?.email || "",
         createdAt: new Date().toISOString(),
       };
 
@@ -85,7 +79,6 @@ export default function AddDestination() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          authorization: `Bearer ${token}`, // JWT token in the Authorization header
         },
         body: JSON.stringify(payload),
       });

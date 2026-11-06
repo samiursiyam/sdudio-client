@@ -41,25 +41,37 @@
 - Client: `src/lib/auth-client.js` — `createAuthClient` (`better-auth/react`) + `jwtClient()`, which enables `authClient.token()` and `authClient.jwks()`.
 - Cookies after login: `better-auth.session_token` (signed session id) and `better-auth.session_data` (JWT cookieCache) — both **HttpOnly, SameSite=Lax, Path=/, Max-Age=7d**; the `Secure` flag is added automatically on https/production.
 - Env vars (don't rename): `BETTER_AUTH_SECRET` (encrypts JWK private key, signs cookies), `BETTER_AUTH_URL` (base URL; becomes the JWT **iss** and **aud**), `NEXT_PUBLIC_BETTER_AUTH_URL` (client baseURL; required by `auth-client.js`). Comments in `.env` belong on their own lines.
-- Express backend base URL comes from `.env`: **`SERVER_URL`** (server components — inlined only server-side) and **`NEXT_PUBLIC_SERVER_URL`** (legacy, kept in sync). **Client components never call the backend directly anymore** — the browser hits the same-origin proxy **`/backend/*`**, which `next.config.mjs` rewrites to `${SERVER_URL}/*` (no CORS, works from any deployment). Server components still fetch `${SERVER_URL}/...` directly. `images.remotePatterns` and `smart-image.jsx` derive the backend host from `SERVER_URL` / `NEXT_PUBLIC_SERVER_URL` automatically. **Never hardcode `http://localhost:5000`** in `src/` — always use these.
+- Express backend base URL comes from `.env`: **`SERVER_URL`** (server-side only) and **`NEXT_PUBLIC_SERVER_URL`** (legacy, kept in sync). **Client components never call the backend directly** — the browser hits the same-origin proxy **`/backend/*`**, implemented as a route handler at `src/app/backend/[...path]/route.js`. It verifies the better-auth session, rejects unauthenticated mutations with 401, and re-asserts identity to the backend via `x-internal-secret` + `x-user-*` headers (Bearer JWKS fallback when `INTERNAL_API_SECRET` is unset). Server components fetch `${BACKEND_URL}/...` directly with `backendAuthHeaders()` from `src/lib/backend.js`. `images.remotePatterns` and `smart-image.jsx` derive the backend host from `SERVER_URL` / `NEXT_PUBLIC_SERVER_URL` automatically. **Never hardcode `http://localhost:5000`** in `src/` — always use these.
 - `src/proxy.js` — route protection for `/my-bookings*`, `/add-destination` (Node.js runtime; `auth.api.getSession`, redirects to `/login`).
 
-### How the JWT travels (frontend → backend)
+### How identity travels (frontend → backend)
 
 1. Login sets the two session cookies via `/api/auth/*`.
-2. Every call to the Express backend (`http://localhost:5000`) attaches the JWT as `Authorization: Bearer <jwt>`:
-   - **Client components** use `src/lib/get-jwt.js` — `getJwtToken()` wraps `authClient.token()` (i.e. `GET /api/auth/token` with session cookies; returns `null` on any failure — it never throws) and `bearer(token)` spreads `{ Authorization: "Bearer …" }` only when a token exists.
-   - **Server components** call `auth.api.getToken({ headers: await headers() })` directly (see `my-bookings/page.jsx`, `my-listings/page.jsx`, `profile/page.jsx`).
-   - Logged-out requests carry **no** Authorization header; the backend's public behavior is unchanged.
-3. Token is EdDSA-signed, `iss`/`aud` = `BETTER_AUTH_URL` (`http://localhost:3000` in dev), `exp − iat` = 7 days (from `expirationTime: "7d"`).
+2. Browser calls `/backend/*` on the **same origin**. The proxy route handler (`src/app/backend/[...path]/route.js`):
+   - verifies the session via `auth.api.getSession({ headers: await headers() })`;
+   - if the method is not GET/HEAD and there is no session → **401** JSON (never reaches the backend);
+   - re-asserts identity to the backend with `x-internal-secret` + `x-user-email` / `x-user-id` / `x-user-name` headers (timing-safe comparison on the backend; never visible to the browser);
+   - if `INTERNAL_API_SECRET` is unset, falls back to fetching `auth.api.getToken()` and sending `Authorization: Bearer <jwt>`;
+   - never forwards browser cookies/authorization headers.
+3. Server components (my-bookings / my-listings / profile) fetch `${BACKEND_URL}/...` directly using **`getBackendAuthHeaders(user)`** from `src/lib/backend.js` (secret path when set, Bearer-token fallback otherwise).
+4. Token (when used) is EdDSA-signed, `iss`/`aud` = `BETTER_AUTH_URL`, `exp − iat` = 7 days. **`INTERNAL_API_SECRET` path does not depend on JWKS at all** — production works even if JWKS/iss/aud are misconfigured.
 
-### Which files send the JWT (all changed/added in this task)
+**Backend contract (`wonderlsat-server/index.js`):**
+- `x-internal-secret` matches → identity taken from `x-user-*` headers. Wrong/missing secret → silently falls through to JWKS Bearer verification.
+- Verified `req.user.email` is authoritative — **`userEmail` in request bodies is ignored** for identity.
+- `POST /bookings` and `POST /add-destination` require a verified identity (401 otherwise) and force `userEmail` from it.
+- `POST /bookings` has a server-side duplicate guard (same `userEmail` + `destinationId` → 409) — double-click safe.
+- `GET /bookings/:userEmail` requires identity and returns 403 unless the param matches the caller. Booking data is private.
+- `DELETE /my-bookings/:id` and ownership checks for edit/delete destination require matching identity.
 
-New file:
-- `src/lib/get-jwt.js` — `getJwtToken()` + `bearer()`.
+### Which files call the backend
 
-Client components (all call the **same-origin `/backend/*` proxy** — no `NEXT_PUBLIC_SERVER_URL` in the bundle):
-- `src/components/BookingCard.jsx` — GET `/bookings/{email}` and POST `/bookings` *(token was already fetched here but never sent — now attached as Bearer; its fail-fast behavior on missing token is kept)*
+Shared helper:
+- `src/lib/backend.js` — `BACKEND_URL`, `backendAuthHeaders(user, token)`, `getBackendAuthHeaders(user)`.
+- `src/lib/get-jwt.js` — **deleted** (browser-side token access is gone entirely).
+
+Client components (all call `/backend/*` **without** credentials — the proxy attaches them):
+- `src/components/BookingCard.jsx` — GET `/bookings/{email}` and POST `/bookings`
 - `src/components/EditDestination.jsx` — PATCH `/destination/{id}`
 - `src/components/DeleteDestination.jsx` — DELETE `/destination/{id}`
 - `src/components/my-bookings/cancel-booking.jsx` — DELETE `/my-bookings/{bookingId}`
@@ -67,9 +79,12 @@ Client components (all call the **same-origin `/backend/*` proxy** — no `NEXT_
 - `src/app/(pages)/saved/page.jsx` — no backend call at all (server component passes cached data to `src/components/saved/saved-client.jsx`)
 
 Server components:
-- `src/app/(pages)/my-bookings/page.jsx` — GET `/bookings/{email}` *(token was already fetched via `auth.api.getToken` and discarded — now sent)*
-- `src/app/(pages)/my-listings/page.jsx` — GET `/destinations`
-- `src/app/(pages)/profile/page.jsx` — GET `/destinations` + GET `/bookings/{email}`
+- `src/app/(pages)/my-bookings/page.jsx` — GET `/bookings/{email}` (error card on failure)
+- `src/app/(pages)/my-listings/page.jsx` — GET `/destinations` (error card on failure)
+- `src/app/(pages)/profile/page.jsx` — GET `/destinations` + GET `/bookings/{email}` (slim warning banner on failure)
+
+Proxy:
+- `src/app/backend/[...path]/route.js` — same-origin proxy; verifies session, injects identity, streams backend response.
 
 Intentionally **not** sending the token:
 - `src/lib/destinations-server.js` (used by Home, `/destinations`, `/destinations/[id]`, `/categories`, and `app/layout.js`) — these are public, statically prerendered pages; calling `headers()` there would force dynamic rendering. The backend serves this route publicly (verified: 200 without token). If the backend ever protects `/destinations`, these pages become dynamic (or the call must move).
@@ -78,27 +93,12 @@ Intentionally **not** sending the token:
 
 The Express backend does **not** call Better Auth per request. It verifies the JWT **locally** with the public JWKS (safe to cache; refetch only when an unknown `kid` shows up):
 
-- **JWKS endpoint (public, no cookies needed):** `GET http://localhost:3000/api/auth/jwks`
-  → `{"keys":[{"alg":"EdDSA","crv":"Ed25519","kty":"OKP","x":"…","kid":"…"}]}`
-- **Verify** (Node/Express, `jose`):
-
-```js
-import { createRemoteJWKSet, jwtVerify } from 'jose';
-
-const JWKS = createRemoteJWKSet(new URL('http://localhost:3000/api/auth/jwks'));
-
-// Cache JWKS indefinitely; refetch only on unknown kid.
-const { payload } = await jwtVerify(token, JWKS, {
-  issuer: 'http://localhost:3000',   // = BETTER_AUTH_URL — change in production
-  audience: 'http://localhost:3000', // = BETTER_AUTH_URL — change in production
-});
-// payload.sub   → user id
-// payload.email → user email (verify emails match what you expect)
-```
-
-- Express middleware sketch: read `Authorization: Bearer …` → 401 if missing/invalid → attach `{ id: payload.sub, email: payload.email }` to `req.user` → 403 if the payload doesn't match the resource being touched.
-- **Never trust `userEmail` sent in request bodies** (the frontend still sends it for backwards compatibility) — derive identity from the verified JWT instead.
-- `/api/auth/token` requires a session (401 without cookies). The backend should never need it; it exists for browsers.
+- Express upstream: the Next.js proxy (or server components) calls the backend; the backend authenticates via **`x-internal-secret`** (primary) or **JWKS Bearer** (fallback). The JWKS verifier (env-driven via `BETTER_AUTH_JWKS_URL` / `BETTER_AUTH_URL`) still works for direct API access:
+  - **JWKS endpoint (public):** `GET https://<frontend-origin>/api/auth/jwks`
+  - **Node/Express, `jose`:** `jwtVerify(token, createRemoteJWKSet(new URL(JWKS_URL)), { issuer: BETTER_AUTH_URL, audience: BETTER_AUTH_URL })`
+- Backend middleware (`wonderlsat-server/index.js`): wrong/absent `x-internal-secret` → falls through to Bearer/JWKS; no Bearer → public routes only. Invalid Bearer → 401.
+- **Never trust `userEmail` sent in request bodies** — the backend derives identity from the verified session (proxy) or verified JWT (direct), ignoring body emails.
+- `/api/auth/token` requires a session (401 without cookies). The backend only needs it for the JWKS fallback; primary path does not use it.
 - Manual fetch for debugging: `curl -b "<session cookies>" http://localhost:3000/api/auth/token` → `{ "token": "ey…" }`. In DevTools, the transport JWT visible to JS lives in the `set-auth-jwt` response header of `get-session`, and the HttpOnly `better-auth.session_data` cookie carries the same identity as a cached payload.
 - If `BETTER_AUTH_URL` (or the deploy origin) changes, update `issuer`/`audience` on the backend verifier; the `kid` stays stable unless key rotation is enabled (`jwt({ jwks: { rotationInterval, gracePeriod } })` — disabled by default).
 
@@ -128,20 +128,19 @@ const { payload } = await jwtVerify(token, JWKS, {
 ### Gotchas / known non-goals
 
 - The `/sigin` route (signup page) is intentionally named with a typo; links depend on it — don't rename.
-- Backend (`:5000`) currently serves `/destinations` and `/bookings/*` publicly (200 without token). Bearer will be enforced when the backend starts verifying — no frontend changes needed.
+- Backend (`:5000`) serves public routes (`/destinations`, `/destination/:id`) anonymously; booking endpoints require a verified identity and `userEmail` is taken from the verified session — never from the body.
 - Better Auth windows: `auth-client.js` relies on `NEXT_PUBLIC_BETTER_AUTH_URL`; `window.location.origin` is the fallback inside better-auth but don't rely on it.
 - Pre-existing, unrelated lint errors (do not "fix" as a drive-by): `save-button.jsx`, `theme-toggle.jsx`, `carousel.jsx`, `use-mobile.js`. (`saved/page.jsx` was rewritten clean and is no longer on this list.)
 - `src/lib/destinations.js` is a pure sorting helper, **not** backend access; the only backend fetch helper for public data is `src/lib/destinations-server.js` (server-side, `revalidate: 30`, React `cache()`).
 
 ## Deployment (Vercel) & resilience
 
-See **DEPLOYMENT.md** for the full checklist (backend deploy → Vercel env vars → backend JWKS/iss/aud for prod). Key points:
+See **DEPLOYMENT.md** for the full checklist. Key points:
 
-- **The Express backend must be publicly reachable** — Vercel/serverless cannot reach `localhost:5000`. Point `SERVER_URL` at the deployed backend.
-- **Client components call the same-origin `/backend/*` proxy** (rewrite → `${SERVER_URL}/*`) — no CORS setup, no `NEXT_PUBLIC_SERVER_URL` needed in the browser bundle.
-- Server components fetch `${SERVER_URL}/...` directly; dynamic fetches use `cache: 'no-store'`.
-- If the backend is unreachable, server pages show a **visible "can't reach the server" card** (`src/components/backend-unavailable.jsx`) or a slim warning banner (profile) — never a fake "No bookings found" empty state. Saved page no longer calls the backend from the browser at all (server-side cached list → `saved-client.jsx` filters localStorage ids).
-- Production auth requires `BETTER_AUTH_URL` = the Vercel origin, and the **backend's** JWKS/iss/aud must match it (backend repo change).
+- **The Express backend must be publicly reachable** — Vercel/serverless cannot reach `localhost:5000`. `SERVER_URL` is set in the frontend project.
+- **Both Vercel projects need `INTERNAL_API_SECRET`** (same value, Production + Preview) — primary auth path, JWKS no longer required for the proxy. It's already set in both (`studeo-client` + `studeio`).
+- **Client components call the same-origin `/backend/*` proxy** (route handler → backend) — no CORS, no tokens in the browser bundle.
+- Server components fetch `${BACKEND_URL}/...` directly with `no-store`; show a visible error card/banner on failure (never a fake empty state). Saved page calls the backend from the **server** only.
 
 ### UX polish added (Nov 2026)
 

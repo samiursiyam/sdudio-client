@@ -22,8 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { authClient } from "@/lib/auth-client";
-import { getJwtToken, bearer } from "@/lib/get-jwt";
+
 
 const categories = [
   "Photo Studio",
@@ -92,22 +91,18 @@ const EditDestination = ({ destination }) => {
     try {
       const { _id, ...update } = form;
 
-      /* The server only allows the owner's email to edit */
-      const session = await authClient.getSession();
-      const userEmail = session?.data?.user?.email || "";
-      const token = await getJwtToken();
-
+      /* Identity is re-asserted server-side by the /backend proxy —
+         the backend authorizes the edit against the verified owner */
       const res = await fetch(
         `/backend/destination/${destination._id}`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", ...bearer(token) },
-          body: JSON.stringify({ ...update, userEmail }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(update),
         }
       );
 
       const data = await res.json();
-      console.log("Server response:", data);
 
       if (!res.ok) {
         if (res.status === 403 || res.status === 401) {

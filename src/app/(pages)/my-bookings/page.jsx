@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { BookingCard } from '@/components/my-bookings/booking-card';
 import { BackendUnavailable } from '@/components/backend-unavailable';
 import { RouteShell, PageHeadingSkeleton, ListSkeleton } from '@/components/loading/skeletons';
+import { BACKEND_URL, getBackendAuthHeaders } from '@/lib/backend';
 
 const MyBookingsContent = async () => {
     const session = await auth.api.getSession({
@@ -20,29 +21,20 @@ const MyBookingsContent = async () => {
     let data = [];
     let backendError = null;
 
-    const tokenData = await auth.api.getToken({
-        headers: await headers(),
-    }).catch(() => null);
+    const authHeaders = await getBackendAuthHeaders(user);
 
-    if (!tokenData?.token) {
-        backendError = 'no-token';
-    } else {
-        try {
-            const res = await fetch(
-                `${process.env.SERVER_URL}/bookings/${encodeURIComponent(user.email)}`,
-                {
-                    headers: { Authorization: `Bearer ${tokenData.token}` },
-                    cache: 'no-store',
-                }
-            );
-            if (!res.ok) {
-                backendError = res.status === 401 || res.status === 403 ? 'auth' : `http-${res.status}`;
-            } else {
-                data = await res.json();
-            }
-        } catch (error) {
-            backendError = 'unreachable';
+    try {
+        const res = await fetch(
+            `${BACKEND_URL}/bookings/${encodeURIComponent(user.email)}`,
+            { headers: authHeaders, cache: 'no-store' }
+        );
+        if (!res.ok) {
+            backendError = res.status === 401 || res.status === 403 ? 'auth' : `http-${res.status}`;
+        } else {
+            data = await res.json();
         }
+    } catch (error) {
+        backendError = 'unreachable';
     }
 
     const bookings = Array.isArray(data) ? data : [];
@@ -59,7 +51,7 @@ const MyBookingsContent = async () => {
                 <BackendUnavailable
                     retryHref="/my-bookings"
                     description={
-                        backendError === 'no-token' || backendError === 'auth'
+                        backendError === 'auth'
                             ? 'Your session could not be verified by the booking server. Please log in again.'
                             : 'We could not load your bookings — the booking server is unreachable or returned an error. Your bookings are safe; this is a connection problem.'
                     }
