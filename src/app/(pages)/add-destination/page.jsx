@@ -81,7 +81,7 @@ export default function AddDestination() {
         createdAt: new Date().toISOString(),
       };
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/add-destination`, {
+      const res = await fetch(`/backend/add-destination`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,4 +1,4 @@
-import React, { Fragment, Suspense } from 'react';
+import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Plus, Wallet } from 'lucide-react';
@@ -7,6 +7,8 @@ import { headers } from 'next/headers';
 import { DestinationCard } from '@/components/destinations/destination-card';
 import EditDestination from '@/components/EditDestination';
 import DeleteDestination from '@/components/DeleteDestination';
+import { BackendUnavailable } from '@/components/backend-unavailable';
+import { RouteShell, PageHeadingSkeleton, CardGridSkeleton, StatCardsSkeleton } from '@/components/loading/skeletons';
 
 const formatDate = (value) => {
     if (!value) return '—';
@@ -39,14 +41,20 @@ const MyListingsContent = async () => {
     }
 
     let data = [];
+    let backendError = null;
 
     try {
         const res = await fetch(`${process.env.SERVER_URL}/destinations`, {
             headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+            cache: 'no-store',
         });
-        data = await res.json();
+        if (!res.ok) {
+            backendError = `http-${res.status}`;
+        } else {
+            data = await res.json();
+        }
     } catch (error) {
-        // Backend unreachable — fall through to the empty state
+        backendError = 'unreachable';
     }
 
     const email = String(user.email || '').trim().toLowerCase();
@@ -59,6 +67,23 @@ const MyListingsContent = async () => {
     const listings = (Array.isArray(data) ? data : []).filter(
         (destination) => !destination?.userEmail || isOwner(destination)
     );
+
+    if (backendError) {
+        return (
+            <RouteShell>
+                <h1 className="text-3xl font-normal text-foreground sm:text-4xl">
+                    My Studio Listings
+                </h1>
+                <p className="mt-3 text-sm text-foreground/70">
+                    Your studios, plus the shared ones everyone can see
+                </p>
+                <BackendUnavailable
+                    retryHref="/my-listings"
+                    description="We could not load your listings — the studio server is unreachable or returned an error. Your listings are safe; this is a connection problem."
+                />
+            </RouteShell>
+        );
+    }
 
     /* Quick overview numbers */
     const categories = new Set(listings.map((item) => item.category).filter(Boolean));
@@ -163,37 +188,26 @@ const MyListingsContent = async () => {
     );
 };
 
-/* Next.js 16 (Cache Components) — dynamic fetch inside a Suspense boundary */
+/* Suspense boundary — dynamic fetch shows the shared skeleton */
 export default function Page() {
     return (
         <Suspense
             fallback={
-                <main className="min-h-screen bg-white px-4 py-10 sm:px-10 lg:px-16">
-                    <div className="mx-auto max-w-6xl">
-                        <div className="flex items-start justify-between gap-4">
-                            <div className="w-full">
-                                <h1 className="h-10 w-72 animate-pulse bg-[#f7f8fa]" />
-                                <div className="mt-4 h-4 w-56 animate-pulse bg-[#f7f8fa]" />
-                            </div>
-                            <div className="h-11 w-48 shrink-0 animate-pulse bg-[#f7f8fa]" />
+                <RouteShell>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <div className="h-10 w-72 animate-pulse bg-[#f7f8fa]" />
+                            <div className="mt-4 h-4 w-56 animate-pulse bg-[#f7f8fa]" />
                         </div>
-                        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            {[0, 1, 2].map((index) => (
-                                <Fragment key={index}>
-                                    <div className="h-24 animate-pulse bg-[#f7f8fa]" />
-                                </Fragment>
-                            ))}
-                        </div>
-                        <div className="mt-10 grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
-                            {[0, 1, 2, 3].map((index) => (
-                                <div key={index} className="space-y-3">
-                                    <div className="aspect-[19/10] animate-pulse bg-[#f7f8fa]" />
-                                    <div className="h-4 w-40 animate-pulse bg-[#f7f8fa]" />
-                                </div>
-                            ))}
-                        </div>
+                        <div className="h-11 w-48 shrink-0 animate-pulse bg-[#f7f8fa]" />
                     </div>
-                </main>
+                    <div className="mt-8">
+                        <StatCardsSkeleton />
+                    </div>
+                    <div className="mt-10">
+                        <CardGridSkeleton count={4} />
+                    </div>
+                </RouteShell>
             }
         >
             <MyListingsContent />

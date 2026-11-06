@@ -98,7 +98,7 @@ const EditDestination = ({ destination }) => {
       const token = await getJwtToken();
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SERVER_URL}/destination/${destination._id}`,
+        `/backend/destination/${destination._id}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json", ...bearer(token) },

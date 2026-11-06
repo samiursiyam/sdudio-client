@@ -41,7 +41,7 @@
 - Client: `src/lib/auth-client.js` — `createAuthClient` (`better-auth/react`) + `jwtClient()`, which enables `authClient.token()` and `authClient.jwks()`.
 - Cookies after login: `better-auth.session_token` (signed session id) and `better-auth.session_data` (JWT cookieCache) — both **HttpOnly, SameSite=Lax, Path=/, Max-Age=7d**; the `Secure` flag is added automatically on https/production.
 - Env vars (don't rename): `BETTER_AUTH_SECRET` (encrypts JWK private key, signs cookies), `BETTER_AUTH_URL` (base URL; becomes the JWT **iss** and **aud**), `NEXT_PUBLIC_BETTER_AUTH_URL` (client baseURL; required by `auth-client.js`). Comments in `.env` belong on their own lines.
-- Express backend base URL comes from `.env`: **`SERVER_URL`** (server components — inlined only server-side) and **`NEXT_PUBLIC_SERVER_URL`** (client components — must be `NEXT_PUBLIC_` or the browser bundle reads `undefined`). Keep both in sync. **Never hardcode `http://localhost:5000`** in `src/` — always use these. (Exception kept intentionally: `smart-image.jsx` image-host allowlist and `next.config.mjs` `images.remotePatterns`, which list the backend host for `next/image` — update them if the backend host changes.)
+- Express backend base URL comes from `.env`: **`SERVER_URL`** (server components — inlined only server-side) and **`NEXT_PUBLIC_SERVER_URL`** (legacy, kept in sync). **Client components never call the backend directly anymore** — the browser hits the same-origin proxy **`/backend/*`**, which `next.config.mjs` rewrites to `${SERVER_URL}/*` (no CORS, works from any deployment). Server components still fetch `${SERVER_URL}/...` directly. `images.remotePatterns` and `smart-image.jsx` derive the backend host from `SERVER_URL` / `NEXT_PUBLIC_SERVER_URL` automatically. **Never hardcode `http://localhost:5000`** in `src/` — always use these.
 - `src/proxy.js` — route protection for `/my-bookings*`, `/add-destination` (Node.js runtime; `auth.api.getSession`, redirects to `/login`).
 
 ### How the JWT travels (frontend → backend)
@@ -58,13 +58,13 @@
 New file:
 - `src/lib/get-jwt.js` — `getJwtToken()` + `bearer()`.
 
-Client components:
+Client components (all call the **same-origin `/backend/*` proxy** — no `NEXT_PUBLIC_SERVER_URL` in the bundle):
 - `src/components/BookingCard.jsx` — GET `/bookings/{email}` and POST `/bookings` *(token was already fetched here but never sent — now attached as Bearer; its fail-fast behavior on missing token is kept)*
 - `src/components/EditDestination.jsx` — PATCH `/destination/{id}`
 - `src/components/DeleteDestination.jsx` — DELETE `/destination/{id}`
 - `src/components/my-bookings/cancel-booking.jsx` — DELETE `/my-bookings/{bookingId}`
 - `src/app/(pages)/add-destination/page.jsx` — POST `/add-destination`
-- `src/app/(pages)/saved/page.jsx` — GET `/destinations`
+- `src/app/(pages)/saved/page.jsx` — no backend call at all (server component passes cached data to `src/components/saved/saved-client.jsx`)
 
 Server components:
 - `src/app/(pages)/my-bookings/page.jsx` — GET `/bookings/{email}` *(token was already fetched via `auth.api.getToken` and discarded — now sent)*
@@ -130,11 +130,27 @@ const { payload } = await jwtVerify(token, JWKS, {
 - The `/sigin` route (signup page) is intentionally named with a typo; links depend on it — don't rename.
 - Backend (`:5000`) currently serves `/destinations` and `/bookings/*` publicly (200 without token). Bearer will be enforced when the backend starts verifying — no frontend changes needed.
 - Better Auth windows: `auth-client.js` relies on `NEXT_PUBLIC_BETTER_AUTH_URL`; `window.location.origin` is the fallback inside better-auth but don't rely on it.
-- Pre-existing, unrelated lint errors (do not "fix" as a drive-by): `saved/page.jsx`, `save-button.jsx`, `theme-toggle.jsx`, `carousel.jsx`, `use-mobile.js`.
+- Pre-existing, unrelated lint errors (do not "fix" as a drive-by): `save-button.jsx`, `theme-toggle.jsx`, `carousel.jsx`, `use-mobile.js`. (`saved/page.jsx` was rewritten clean and is no longer on this list.)
 - `src/lib/destinations.js` is a pure sorting helper, **not** backend access; the only backend fetch helper for public data is `src/lib/destinations-server.js` (server-side, `revalidate: 30`, React `cache()`).
 
-<!-- BEGIN:nextjs-agent-rules -->
+## Deployment (Vercel) & resilience
 
+See **DEPLOYMENT.md** for the full checklist (backend deploy → Vercel env vars → backend JWKS/iss/aud for prod). Key points:
+
+- **The Express backend must be publicly reachable** — Vercel/serverless cannot reach `localhost:5000`. Point `SERVER_URL` at the deployed backend.
+- **Client components call the same-origin `/backend/*` proxy** (rewrite → `${SERVER_URL}/*`) — no CORS setup, no `NEXT_PUBLIC_SERVER_URL` needed in the browser bundle.
+- Server components fetch `${SERVER_URL}/...` directly; dynamic fetches use `cache: 'no-store'`.
+- If the backend is unreachable, server pages show a **visible "can't reach the server" card** (`src/components/backend-unavailable.jsx`) or a slim warning banner (profile) — never a fake "No bookings found" empty state. Saved page no longer calls the backend from the browser at all (server-side cached list → `saved-client.jsx` filters localStorage ids).
+- Production auth requires `BETTER_AUTH_URL` = the Vercel origin, and the **backend's** JWKS/iss/aud must match it (backend repo change).
+
+### UX polish added (Nov 2026)
+
+- Custom **404** at `src/app/not-found.jsx` (branded: dotted map grid, stroked 404 numerals, dashed route SVG, Home / Browse Spaces CTAs).
+- **Loading splash** at `src/app/loading.jsx` + route-level `loading.jsx` for destinations, `[id]`, categories, my-bookings, my-listings, saved, profile, add-destination. All reuse shared skeleton blocks from `src/components/loading/skeletons.jsx` (`RouteShell`, `PageHeadingSkeleton`, `CardGridSkeleton`, `ListSkeleton`, `StatCardsSkeleton`, `DetailSkeleton`, `Pulse`). Suspense fallbacks in my-bookings / my-listings / profile render the same skeletons.
+- `globals.css` has the `animate-splash-bar` / `animate-brand-dot` keyframes used by the splash screen.
+- Native `alert()` is fully replaced by the Base UI toast system (`@/components/ui/toast`, `<Toaster />` mounted in root layout). Toasts fire on booking success/failure, already-reserved, booking cancel, login/signup failure+success, add/delete destination, save/unsave heart.
+
+<!-- BEGIN:nextjs-agent-rules -->
 ## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

@@ -1,9 +1,11 @@
-import { Fragment, Suspense } from 'react';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { RouteShell, PageHeadingSkeleton, Pulse, StatCardsSkeleton } from '@/components/loading/skeletons';
 import {
   CalendarDays,
   CalendarPlus,
+  CloudOff,
   Heart,
   MapPin,
   Plus,
@@ -65,38 +67,47 @@ const ProfileContent = async () => {
   let listingsCount = 0;
   let bookingsCount = 0;
   let totalSpend = 0;
+  let backendError = null;
 
   try {
     const [destinationsRes, bookingsRes] = await Promise.all([
-      fetch(`${process.env.SERVER_URL}/destinations`, { headers: authHeaders }),
-      fetch(`${process.env.SERVER_URL}/bookings/${user.email}`, {
+      fetch(`${process.env.SERVER_URL}/destinations`, {
         headers: authHeaders,
+        cache: 'no-store',
+      }),
+      fetch(`${process.env.SERVER_URL}/bookings/${encodeURIComponent(user.email)}`, {
+        headers: authHeaders,
+        cache: 'no-store',
       }),
     ]);
 
-    const destinations = await destinationsRes.json();
-    const bookings = await bookingsRes.json();
+    if (!destinationsRes.ok || !bookingsRes.ok) {
+      backendError = `http-${!destinationsRes.ok ? destinationsRes.status : bookingsRes.status}`;
+    } else {
+      const destinations = await destinationsRes.json();
+      const bookings = await bookingsRes.json();
 
-    if (Array.isArray(destinations)) {
-      // Same visibility rule as /my-listings: studios with no owner
-      // plus studios this user added
-      const email = String(user.email || '').trim().toLowerCase();
-      listingsCount = destinations.filter(
-        (destination) =>
-          !destination?.userEmail ||
-          String(destination.userEmail).trim().toLowerCase() === email
-      ).length;
-    }
+      if (Array.isArray(destinations)) {
+        // Same visibility rule as /my-listings: studios with no owner
+        // plus studios this user added
+        const email = String(user.email || '').trim().toLowerCase();
+        listingsCount = destinations.filter(
+          (destination) =>
+            !destination?.userEmail ||
+            String(destination.userEmail).trim().toLowerCase() === email
+        ).length;
+      }
 
-    if (Array.isArray(bookings)) {
-      bookingsCount = bookings.length;
-      totalSpend = bookings.reduce(
-        (sum, booking) => sum + (Number(booking.price) || 0),
-        0
-      );
+      if (Array.isArray(bookings)) {
+        bookingsCount = bookings.length;
+        totalSpend = bookings.reduce(
+          (sum, booking) => sum + (Number(booking.price) || 0),
+          0
+        );
+      }
     }
   } catch (error) {
-    // Backend unreachable — stats stay at zero
+    backendError = 'unreachable';
   }
 
   return (
@@ -108,6 +119,19 @@ const ProfileContent = async () => {
         <p className="mt-3 text-sm text-foreground/70">
           Your account details and quick actions
         </p>
+
+        {backendError ? (
+          <div
+            role="alert"
+            className="mt-6 flex items-center gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-300"
+          >
+            <CloudOff className="size-4 shrink-0" aria-hidden />
+            <span>
+              Live data is temporarily unavailable — bookings and listings may
+              show as zero. Your account is fine; this is a connection problem.
+            </span>
+          </div>
+        ) : null}
 
         {/* Profile card */}
         <div className="mt-10 flex flex-col items-center gap-6 border border-[#e3e7ec] bg-white p-8 text-center sm:flex-row sm:text-left">
@@ -200,38 +224,29 @@ const ProfileContent = async () => {
   );
 };
 
-/* Next.js 16 (Cache Components) — dynamic fetch inside a Suspense boundary */
+/* Suspense boundary — dynamic fetch shows the shared skeleton */
 export default function Page() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-white px-4 py-10 sm:px-10 lg:px-16">
-          <div className="mx-auto max-w-5xl">
-            <h1 className="h-10 w-32 animate-pulse bg-[#f7f8fa]" />
-            <div className="mt-4 h-4 w-56 animate-pulse bg-[#f7f8fa]" />
-            <div className="mt-10 flex items-center gap-6 border border-[#e3e7ec] bg-white p-8">
-              <div className="size-24 shrink-0 animate-pulse rounded-full bg-[#f7f8fa]" />
-              <div className="space-y-3">
-                <div className="h-6 w-40 animate-pulse bg-[#f7f8fa]" />
-                <div className="h-4 w-56 animate-pulse bg-[#f7f8fa]" />
-              </div>
-            </div>
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {[0, 1, 2].map((index) => (
-                <Fragment key={index}>
-                  <div className="h-24 animate-pulse bg-[#f7f8fa]" />
-                </Fragment>
-              ))}
-            </div>
-            <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {[0, 1, 2, 3].map((index) => (
-                <Fragment key={index}>
-                  <div className="h-24 animate-pulse bg-[#f7f8fa]" />
-                </Fragment>
-              ))}
+        <RouteShell maxWidth="max-w-5xl">
+          <PageHeadingSkeleton />
+          <div className="mt-10 flex items-center gap-6 border border-[#e3e7ec] bg-white p-8">
+            <Pulse className="size-24 shrink-0 rounded-full" />
+            <div className="space-y-3">
+              <Pulse className="h-6 w-40" />
+              <Pulse className="h-4 w-56" />
             </div>
           </div>
-        </main>
+          <div className="mt-6">
+            <StatCardsSkeleton />
+          </div>
+          <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[0, 1, 2, 3].map((index) => (
+              <Pulse key={index} className="h-24" />
+            ))}
+          </div>
+        </RouteShell>
       }
     >
       <ProfileContent />

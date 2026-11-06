@@ -46,7 +46,7 @@ const BookingCard = ({ destination }) => {
 
                 const token = await getJwtToken();
                 const res = await fetch(
-                    `${process.env.NEXT_PUBLIC_SERVER_URL}/bookings/${encodeURIComponent(
+                    `/backend/bookings/${encodeURIComponent(
                         user.email.trim().toLowerCase()
                     )}`,
                     { headers: { authorization: `Bearer ${token}` } }
@@ -131,7 +131,7 @@ const BookingCard = ({ destination }) => {
                 bookingDate: new Date(),
             };
 
-            const res = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/bookings`, {
+            const res = await fetch(`/backend/bookings`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

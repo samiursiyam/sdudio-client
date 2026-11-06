@@ -17,7 +17,7 @@ const handleCancel = async () => {
         const token = await getJwtToken();
 
         const res = await fetch(
-            `${process.env.NEXT_PUBLIC_SERVER_URL}/my-bookings/${bookingId}`,
+            `/backend/my-bookings/${bookingId}`,
             {
                 method: 'DELETE',
                 headers: { ...bearer(token) },

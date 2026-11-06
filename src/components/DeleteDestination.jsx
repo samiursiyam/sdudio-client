@@ -32,7 +32,7 @@ const DeleteDestination = ({id, redirectTo = "/destinations"}) => {
        const userEmail = session?.data?.user?.email || "";
        const token = await getJwtToken();
 
-       const res = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/destination/${id}`,{
+       const res = await fetch(`/backend/destination/${id}`,{
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",

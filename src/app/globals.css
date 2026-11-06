@@ -179,3 +179,23 @@
 .dark .text-red-500 {
   color: var(--destructive);
 }
+
+/* ── Loading / 404 motion ─────────────────────────────────────────── */
+/* Indeterminate bar that slides across the splash-screen track */
+@keyframes splash-bar {
+  0%   { left: -40%; width: 35%; }
+  55%  { left: 100%; width: 45%; }
+  100% { left: 100%; width: 45%; }
+}
+.animate-splash-bar {
+  animation: splash-bar 1.25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Soft pulse for the brand dot on the splash screen */
+@keyframes brand-dot {
+  0%, 100% { transform: scale(1);   opacity: 1;    }
+  50%      { transform: scale(1.6); opacity: 0.55; }
+}
+.animate-brand-dot {
+  animation: brand-dot 1.15s ease-in-out infinite;
+}
